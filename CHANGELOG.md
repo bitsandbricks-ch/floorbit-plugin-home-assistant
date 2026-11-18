@@ -3,6 +3,13 @@
 Each release has a section `## <version>`; its text becomes the GitHub release notes and the
 Marketplace's "what's new".
 
+## 1.0.1
+
+- Keeps reading for the whole event when a round goes wrong. Home Assistant answering something
+  other than its list of states, something that isn't a web server at its address, or any other
+  surprise, used to stop the reading until the agent restarted; now it is an error for that round.
+- A sensor state of `nan` or `inf` is no reading.
+
 ## 1.0.0
 
 - First release from its own repository. Until now the plugin shipped inside Floorbit; it works
