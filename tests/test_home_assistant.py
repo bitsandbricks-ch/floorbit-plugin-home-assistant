@@ -63,3 +63,37 @@ def test_home_assistant_reads_and_stops_on_a_refused_token(fake):
     assert not ctx.may_login(settings["url"], "home-assistant", "r1")
     ctx.settings["token"] = "good-token"
     assert plugin.tick() == ([], ["token refused"])          # not tried again until cleared
+
+
+def test_home_assistant_odd_answers_are_no_reading(fake):
+    m = load("agent")
+    for odd in ({"state": "nan", "attributes": {"unit_of_measurement": "W"}},
+                {"state": "inf", "attributes": {"unit_of_measurement": "W"}},
+                {"state": "5", "attributes": ["W"]}, {"state": "5"}, [], None):
+        assert m.reading(odd) is None
+    settings = {"url": f"http://{fake}", "token": "t", "sensors": "db1-1 = sensor.a"}
+    ctx = MemoryContext("home-assistant", settings, {"sends": {"readings": {"privacy": "device", "latest": True}}})
+    plugin = m.AgentPlugin(ctx)
+    plugin.sensors, plugin.url, plugin.rev = m.parse_sensors(settings["sensors"]), settings["url"], "r1"
+    for body in ({"entity_id": "sensor.a"}, 5, [{"entity_id": ["sensor.a"]}, "x"]):
+        Fake.routes = {"/api/states": (200, body)}
+        assert plugin.tick()[0] == []
+
+
+def test_a_round_that_breaks_does_not_stop_the_readings(monkeypatch):
+    m = load("agent")
+    ctx = MemoryContext("home-assistant", {}, {"sends": {}})
+    agent = m.AgentPlugin(ctx)
+    agent.interval = 0
+    rounds = []
+
+    def tick():
+        rounds.append(1)
+        if len(rounds) == 1:
+            raise KeyError("surprise")
+        ctx.stopping.set()
+
+    monkeypatch.setattr(agent, "tick", tick)
+    agent.loop()
+    assert len(rounds) == 2
+    assert any("a round failed" in e["error"] for e in ctx.health_.report()["errors"])
